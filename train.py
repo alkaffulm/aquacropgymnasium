@@ -1,0 +1,92 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.monitor import Monitor
+import warnings
+import logging
+
+from aquacropgymnasium.env import Maize
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+logging.basicConfig(level=logging.WARNING)
+
+output_dir = './train_output'
+os.makedirs(output_dir, exist_ok=True)
+
+class RewardLoggingCallback(BaseCallback):
+    def __init__(self, agent_name, output_dir, verbose=0):
+        super(RewardLoggingCallback, self).__init__(verbose)
+        self.agent_name = agent_name
+        self.output_dir = output_dir
+        self.episode_rewards = []
+        self.current_episode_rewards = []
+        self.total_steps = 0
+
+    def _on_step(self) -> bool:
+        reward = self.locals['rewards'][0]
+        self.current_episode_rewards.append(reward)
+        self.total_steps += 1
+
+        if 'dones' in self.locals and any(self.locals['dones']): 
+            total_reward = np.sum(self.current_episode_rewards)
+            self.episode_rewards.append(total_reward)
+            self.current_episode_rewards = []
+        return True
+
+    def _on_training_end(self):
+        if self.episode_rewards:
+            final_mean_reward = np.mean(self.episode_rewards)
+            final_std_reward = np.std(self.episode_rewards)
+            print(f"Training finished for {self.agent_name}. Final mean reward: {final_mean_reward}, Final reward std: {final_std_reward}")
+        self.plot_rewards()
+
+    def plot_rewards(self):
+        plt.figure(figsize=(10, 5))
+        plt.plot(range(len(self.episode_rewards)), self.episode_rewards)
+        plt.xlabel('Episodes')
+        plt.ylabel('Total Reward')
+        plt.title(f'Total Reward per Episode for PPO Model')
+        plt.grid(True)
+        plt.savefig(os.path.join(self.output_dir, f'reward_plot_{self.agent_name}.png'))
+        plt.close()
+
+train_timesteps = 500000
+
+env = Maize(mode='train', year1=1982, year2=2007)
+    
+train_env = DummyVecEnv([lambda: Monitor(env)])
+train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True)
+
+model_name = f"ppo_model"
+log_dir = os.path.join(output_dir, f"tensorboard_logs")
+os.makedirs(log_dir, exist_ok=True)
+
+ppo_reward_logging_callback = RewardLoggingCallback(agent_name=model_name, output_dir=output_dir)
+ppo_model = PPO(
+    "MlpPolicy",
+    train_env,
+    learning_rate=5.05e-05,
+    n_steps=2048,
+    batch_size=128,
+    n_epochs=20,
+    gamma=0.96,
+    clip_range=0.14,
+    ent_coef=2.15e-05,
+    verbose=1,
+    tensorboard_log=log_dir
+)
+
+print(f"Training {model_name}...")
+ppo_model.learn(total_timesteps=train_timesteps, callback=ppo_reward_logging_callback)
+
+model_output_path = os.path.join(output_dir, f"{model_name}.zip")
+vecnorm_output_path = os.path.join(output_dir, f"{model_name}_vecnormalize.pkl")
+
+ppo_model.save(model_output_path)
+train_env.save(vecnorm_output_path)
+train_env.close()
+
+print("Training completed.")
