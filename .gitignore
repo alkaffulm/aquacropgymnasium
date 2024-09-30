@@ -1,2 +1,1 @@
-train_output/*
-eval_output/*
+train_output/tensorboard_logs/*
