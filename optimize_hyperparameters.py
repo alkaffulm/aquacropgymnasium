@@ -89,7 +89,7 @@ train_env = DummyVecEnv([lambda: Monitor(Maize(mode='train', year1=1982, year2=2
 train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True)
 
 ppo_study = optuna.create_study(direction='maximize', sampler=TPESampler(), pruner=MedianPruner())
-ppo_study.optimize(optimize_agent, n_trials=30)
+ppo_study.optimize(optimize_agent, n_trials=50)
 
 print("Best PPO hyperparameters:", ppo_study.best_params)
 
