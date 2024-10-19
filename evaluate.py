@@ -18,6 +18,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 logging.basicConfig(level=logging.WARNING)
 
 seeds = [1, 2, 3]
+timestep_values = [500000, 1000000, 1500000, 2000000, 2500000]
 
 train_output_dir = './train_output'
 eval_output_dir = './eval_output'
@@ -61,14 +62,14 @@ def evaluate_agent(agent, env, n_eval_episodes=100, agent_name="Agent"):
         'std_irrigation': np.std(irrigations)
     }
 
-def load_ppo_model(seed):
+def load_ppo_model_timestep(seed, timestep):
     set_seed(seed)
     eval_env = make_eval_env(seed)
-    vecnormalize_filename = os.path.join(train_output_dir, "ppo_model_vecnormalize.pkl")
+    vecnormalize_filename = os.path.join(train_output_dir, f"ppo_model_{timestep}_vecnormalize.pkl")
     eval_env = VecNormalize.load(vecnormalize_filename, eval_env)
     eval_env.training = False
     eval_env.norm_reward = False
-    model_name = os.path.join(train_output_dir, "ppo_model.zip")
+    model_name = os.path.join(train_output_dir, f"ppo_model_{timestep}.zip")
     model = PPO.load(model_name, env=eval_env)
     return model, eval_env
 
@@ -107,15 +108,15 @@ def aggregate_results_across_seeds(results_across_seeds):
 CROP_PRICE = 180
 IRRIGATION_COST = 1
 FIXED_COST = 1728
+
 def calculate_profit(mean_yield, mean_irrigation):
     return CROP_PRICE * mean_yield - IRRIGATION_COST * mean_irrigation - FIXED_COST
 
 def calculate_water_efficiency(mean_yield, mean_irrigation):
-    irrigation_m3_per_ha = mean_irrigation * 10
-    if irrigation_m3_per_ha == 0:
+    if mean_irrigation == 0:
         return np.nan
     yield_kg_per_ha = mean_yield * 1000
-    return yield_kg_per_ha / irrigation_m3_per_ha
+    return yield_kg_per_ha / mean_irrigation
 
 path = get_filepath('champion_climate.txt')
 wdf = prepare_weather(path)
@@ -150,26 +151,15 @@ aquacrop_results = pd.concat(outlist, axis=0)
 aquacrop_results_agg = aquacrop_results.groupby('label').agg({
     'Dry yield (tonne/ha)': ['mean', 'std'],
     'Seasonal irrigation (mm)': ['mean', 'std']
-})
+}).reset_index()
 
-aquacrop_results_agg.columns = ['_'.join(col).strip() for col in aquacrop_results_agg.columns.values]
+aquacrop_results_agg.columns = ['label'] + ['_'.join(col).strip() for col in aquacrop_results_agg.columns.values[1:]]
 
-for label in aquacrop_results_agg.index:
-    mean_yield = aquacrop_results_agg.loc[label, 'Dry yield (tonne/ha)_mean']
-    mean_irrigation = aquacrop_results_agg.loc[label, 'Seasonal irrigation (mm)_mean']
-    aquacrop_results_agg.loc[label, 'Profit_mean'] = calculate_profit(mean_yield, mean_irrigation)
-    aquacrop_results_agg.loc[label, 'WaterEfficiency_mean'] = calculate_water_efficiency(mean_yield, mean_irrigation)
-
-ppo_results_across_seeds = []
-for seed in seeds:
-    try:
-        ppo_model, ppo_eval_env = load_ppo_model(seed)
-        ppo_results = evaluate_agent(ppo_model, ppo_eval_env, n_eval_episodes=100,
-                                     agent_name=f"PPO_seed_{seed}")
-        ppo_results_across_seeds.append(ppo_results)
-    except Exception as e:
-        print(f"Could not load model for seed {seed}: {e}")
-        continue
+for idx, row in aquacrop_results_agg.iterrows():
+    mean_yield = row['Dry yield (tonne/ha)_mean']
+    mean_irrigation = row['Seasonal irrigation (mm)_mean']
+    aquacrop_results_agg.loc[idx, 'Profit_mean'] = calculate_profit(mean_yield, mean_irrigation)
+    aquacrop_results_agg.loc[idx, 'WaterEfficiency_mean'] = calculate_water_efficiency(mean_yield, mean_irrigation)
 
 random_results_across_seeds = []
 for seed in seeds:
@@ -179,22 +169,9 @@ for seed in seeds:
                                     agent_name=f"RandomAgent_seed_{seed}")
     random_results_across_seeds.append(random_results)
 
-ppo_final_results = aggregate_results_across_seeds(ppo_results_across_seeds)
 random_final_results = aggregate_results_across_seeds(random_results_across_seeds)
-
-ppo_profit = calculate_profit(ppo_final_results['mean_yield'], ppo_final_results['mean_irrigation'])
 random_profit = calculate_profit(random_final_results['mean_yield'], random_final_results['mean_irrigation'])
-ppo_water_efficiency = calculate_water_efficiency(ppo_final_results['mean_yield'], ppo_final_results['mean_irrigation'])
 random_water_efficiency = calculate_water_efficiency(random_final_results['mean_yield'], random_final_results['mean_irrigation'])
-
-ppo_df = pd.DataFrame({
-    'Dry yield (tonne/ha)_mean': [ppo_final_results['mean_yield']],
-    'Dry yield (tonne/ha)_std': [ppo_final_results['std_yield']],
-    'Seasonal irrigation (mm)_mean': [ppo_final_results['mean_irrigation']],
-    'Seasonal irrigation (mm)_std': [ppo_final_results['std_irrigation']],
-    'Profit_mean': [ppo_profit],
-    'WaterEfficiency_mean': [ppo_water_efficiency]
-}, index=['PPO'])
 
 random_df = pd.DataFrame({
     'Dry yield (tonne/ha)_mean': [random_final_results['mean_yield']],
@@ -202,65 +179,70 @@ random_df = pd.DataFrame({
     'Seasonal irrigation (mm)_mean': [random_final_results['mean_irrigation']],
     'Seasonal irrigation (mm)_std': [random_final_results['std_irrigation']],
     'Profit_mean': [random_profit],
-    'WaterEfficiency_mean': [random_water_efficiency]
-}, index=['Random'])
+    'WaterEfficiency_mean': [random_water_efficiency],
+    'label': ['Random']
+})
 
-# Concatenate all results
-comparison_df = pd.concat([ppo_df, random_df, aquacrop_results_agg])
-comparison_df.to_csv(os.path.join(eval_output_dir, 'comparison_results.csv'))
+# Evaluate PPO models at different timesteps
+ppo_timesteps_results = pd.DataFrame()
+for timestep in timestep_values:
+    ppo_results_across_seeds_ts = []
+    for seed in seeds:
+        try:
+            ppo_model, ppo_eval_env = load_ppo_model_timestep(seed, timestep)
+            ppo_results = evaluate_agent(ppo_model, ppo_eval_env, n_eval_episodes=100,
+                                         agent_name=f"PPO_{timestep}_seed_{seed}")
+            ppo_results_across_seeds_ts.append(ppo_results)
+        except Exception as e:
+            print(f"Could not load model for seed {seed} at timestep {timestep}: {e}")
+            continue
+    if ppo_results_across_seeds_ts:
+        ppo_final_results_ts = aggregate_results_across_seeds(ppo_results_across_seeds_ts)
+        ppo_profit_ts = calculate_profit(ppo_final_results_ts['mean_yield'], ppo_final_results_ts['mean_irrigation'])
+        ppo_water_efficiency_ts = calculate_water_efficiency(ppo_final_results_ts['mean_yield'], ppo_final_results_ts['mean_irrigation'])
+        
+        new_row = pd.DataFrame([{
+            'Dry yield (tonne/ha)_mean': ppo_final_results_ts['mean_yield'],
+            'Dry yield (tonne/ha)_std': ppo_final_results_ts['std_yield'],
+            'Seasonal irrigation (mm)_mean': ppo_final_results_ts['mean_irrigation'],
+            'Seasonal irrigation (mm)_std': ppo_final_results_ts['std_irrigation'],
+            'Profit_mean': ppo_profit_ts,
+            'WaterEfficiency_mean': ppo_water_efficiency_ts,
+            'label': f'PPO_{timestep}'
+        }])
+        
+        # Concatenate the new row to the existing DataFrame
+        ppo_timesteps_results = pd.concat([ppo_timesteps_results, new_row], ignore_index=True)
 
-# Plotting
-combined_labels = ['PPO', 'Thresholds', 'Interval', 'Net', 'Rainfed', 'Random']
-combined_yields = [
-    ppo_final_results['mean_yield'],
-    aquacrop_results_agg.loc['Thresholds', 'Dry yield (tonne/ha)_mean'],
-    aquacrop_results_agg.loc['Interval', 'Dry yield (tonne/ha)_mean'],
-    aquacrop_results_agg.loc['Net', 'Dry yield (tonne/ha)_mean'],
-    aquacrop_results_agg.loc['Rainfed', 'Dry yield (tonne/ha)_mean'],
-    random_final_results['mean_yield']
-]
-combined_irrigations = [
-    ppo_final_results['mean_irrigation'],
-    aquacrop_results_agg.loc['Thresholds', 'Seasonal irrigation (mm)_mean'],
-    aquacrop_results_agg.loc['Interval', 'Seasonal irrigation (mm)_mean'],
-    aquacrop_results_agg.loc['Net', 'Seasonal irrigation (mm)_mean'],
-    aquacrop_results_agg.loc['Rainfed', 'Seasonal irrigation (mm)_mean'],
-    random_final_results['mean_irrigation']
-]
-combined_profits = [
-    ppo_profit,
-    aquacrop_results_agg.loc['Thresholds', 'Profit_mean'],
-    aquacrop_results_agg.loc['Interval', 'Profit_mean'],
-    aquacrop_results_agg.loc['Net', 'Profit_mean'],
-    aquacrop_results_agg.loc['Rainfed', 'Profit_mean'],
-    random_profit
-]
-combined_water_efficiency = [
-    ppo_water_efficiency,
-    aquacrop_results_agg.loc['Thresholds', 'WaterEfficiency_mean'],
-    aquacrop_results_agg.loc['Interval', 'WaterEfficiency_mean'],
-    aquacrop_results_agg.loc['Net', 'WaterEfficiency_mean'],
-    aquacrop_results_agg.loc['Rainfed', 'WaterEfficiency_mean'],
-    random_water_efficiency
-]
-combined_yields_std = [
-    ppo_final_results['std_yield'],
-    aquacrop_results_agg.loc['Thresholds', 'Dry yield (tonne/ha)_std'],
-    aquacrop_results_agg.loc['Interval', 'Dry yield (tonne/ha)_std'],
-    aquacrop_results_agg.loc['Net', 'Dry yield (tonne/ha)_std'],
-    aquacrop_results_agg.loc['Rainfed', 'Dry yield (tonne/ha)_std'],
-    random_final_results['std_yield']
-]
-combined_irrigations_std = [
-    ppo_final_results['std_irrigation'],
-    aquacrop_results_agg.loc['Thresholds', 'Seasonal irrigation (mm)_std'],
-    aquacrop_results_agg.loc['Interval', 'Seasonal irrigation (mm)_std'],
-    aquacrop_results_agg.loc['Net', 'Seasonal irrigation (mm)_std'],
-    aquacrop_results_agg.loc['Rainfed', 'Seasonal irrigation (mm)_std'],
-    random_final_results['std_irrigation']
-]
+ppo_timesteps_results.to_csv(os.path.join(eval_output_dir, 'ppo_timesteps_results.csv'), index=False)
 
-colors = ['gold', 'blue', 'green', 'red', 'purple', 'gray']
+best_ppo = ppo_timesteps_results.loc[ppo_timesteps_results['Profit_mean'].astype(float).idxmax()].copy()
+best_ppo['label'] = 'PPO'
+
+comparison_df = pd.concat([random_df, aquacrop_results_agg, best_ppo.to_frame().T], ignore_index=True)
+comparison_df.to_csv(os.path.join(eval_output_dir, 'comparison_results.csv'), index=False)
+
+desired_order = ['PPO', 'Thresholds', 'Interval', 'Net', 'Rainfed', 'Random']
+comparison_df['label'] = pd.Categorical(comparison_df['label'], categories=desired_order, ordered=True)
+comparison_df = comparison_df.sort_values('label')
+
+combined_labels = comparison_df['label']
+combined_yields = comparison_df['Dry yield (tonne/ha)_mean'].astype(float)
+combined_irrigations = comparison_df['Seasonal irrigation (mm)_mean'].astype(float)
+combined_profits = comparison_df['Profit_mean'].astype(float)
+combined_water_efficiency = comparison_df['WaterEfficiency_mean'].astype(float)
+combined_yields_std = comparison_df['Dry yield (tonne/ha)_std'].astype(float)
+combined_irrigations_std = comparison_df['Seasonal irrigation (mm)_std'].astype(float)
+
+color_dict = {
+    'PPO': '#0072B2',          # Blue
+    'Thresholds': '#009E73',   # Green
+    'Interval': '#D55E00',     # Orange
+    'Net': '#CC79A7',          # Purple
+    'Rainfed': '#F0E442',      # Yellow
+    'Random': '#999999'        # Grey
+}
+colors = [color_dict[label] for label in combined_labels]
 
 sns.set_style('whitegrid')
 plt.rcParams.update({'font.size': 14})
@@ -268,33 +250,33 @@ plt.rcParams.update({'font.size': 14})
 plt.figure(figsize=(12, 7))
 plt.bar(combined_labels, combined_yields, yerr=combined_yields_std, capsize=5, color=colors, edgecolor='black')
 plt.ylabel('Mean yield (tonne/ha)')
-plt.title('Comparison of mean yields')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(os.path.join(eval_output_dir, 'combined_yields.png'), dpi=300)
+plt.savefig(os.path.join(eval_output_dir, 'combined_yields.png'), format='png', dpi=300)
+plt.close()
 
 plt.figure(figsize=(12, 7))
 plt.bar(combined_labels, combined_irrigations, yerr=combined_irrigations_std, capsize=5, color=colors, edgecolor='black')
 plt.ylabel('Total irrigation (mm)')
-plt.title('Comparison of total irrigation')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(os.path.join(eval_output_dir, 'combined_irrigations.png'), dpi=300)
+plt.savefig(os.path.join(eval_output_dir, 'combined_irrigations.png'), format='png', dpi=300)
+plt.close()
 
 plt.figure(figsize=(12, 7))
 plt.bar(combined_labels, combined_profits, color=colors, edgecolor='black')
 plt.ylabel('Profit ($)')
-plt.title('Comparison of profits')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(os.path.join(eval_output_dir, 'combined_profits.png'), dpi=300)
+plt.savefig(os.path.join(eval_output_dir, 'combined_profits.png'), format='png', dpi=300)
+plt.close()
 
 plt.figure(figsize=(12, 7))
 plt.bar(combined_labels, combined_water_efficiency, color=colors, edgecolor='black')
 plt.ylabel('Water efficiency (kg/m³)')
-plt.title('Comparison of water efficiency')
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig(os.path.join(eval_output_dir, 'combined_water_efficiency.png'), dpi=300)
+plt.savefig(os.path.join(eval_output_dir, 'combined_water_efficiency.png'), format='png', dpi=300)
+plt.close()
 
 print("Evaluation completed.")

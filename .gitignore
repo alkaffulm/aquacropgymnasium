@@ -1,1 +1,3 @@
+train_output/*
 train_output/tensorboard_logs/*
+eval_output/*
