@@ -2,7 +2,7 @@
 
 ## Introduction
 
-In our paper, **"Sustainable agriculture through efficient irrigation strategies using reinforcement learning"** by Muhammad Alkaff, Yuslena Sari, and Abdullah Basuhail, we introduce AquaCropGymnasium, a reinforcement learning (RL) environment developed to optimize irrigation strategies by integrating [AquaCrop-OSPy](https://aquacropos.github.io/aquacrop/) with the [Gymnasium](https://gymnasium.farama.org/) framework. This project adapts the [AquaCrop-Gym](https://github.com/aquacropos/aquacrop-gym) repository, updated to support AquaCrop-OSPy version **3.0.9** and Gymnasium version **0.29**.
+In our paper, **"Optimizing water use in maize irrigation with reinforcement learning"** by Muhammad Alkaff, Yuslena Sari, and Abdullah Basuhail, we introduce AquaCropGymnasium, a reinforcement learning (RL) environment developed to optimize irrigation strategies by integrating [AquaCrop-OSPy](https://aquacropos.github.io/aquacrop/) with the [Gymnasium](https://gymnasium.farama.org/) framework. This project adapts the [AquaCrop-Gym](https://github.com/aquacropos/aquacrop-gym) repository, updated to support AquaCrop-OSPy version **3.0.9** and Gymnasium version **0.29**.
 
 [AquaCrop](https://www.fao.org/aquacrop/en/), developed by the Land and Water Division of FAO, is a crop model that simulates the yield response of herbaceous crops to water availability. It is designed to balance simplicity, accuracy, and robustness, making it a widely utilized tool for assessing the impacts of water management on crop production, particularly under water-limited conditions.
 
