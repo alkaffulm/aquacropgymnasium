@@ -20,7 +20,7 @@ By integrating AquaCrop-OSPy into a comprehensive RL environment, AquaCropGymnas
 
 1. **Clone the Repository:**
     ```bash
-    git clone https://github.com/your-username/aquacropgymnasium.git
+    git clone https://github.com/alkaffulm/aquacropgymnasium.git
     cd aquacropgymnasium
     ```
 
