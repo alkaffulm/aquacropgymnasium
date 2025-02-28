@@ -1,20 +1,16 @@
-# AquaCropGymnasium
-
 ## Introduction
 
-This repository accompanies the paper **"Optimizing Water Use in Maize Irrigation with Reinforcement Learning"** by Muhammad Alkaff, Yuslena Sari, and Abdullah Basuhail. It presents **AquaCropGymnasium**, a reinforcement learning (RL) environment designed to optimize irrigation strategies by integrating [AquaCrop-OSPy](https://aquacropos.github.io/aquacrop/) with the [Gymnasium](https://gymnasium.farama.org/) framework. This project builds upon the [AquaCrop-Gym](https://github.com/aquacropos/aquacrop-gym) repository, updated to be compatible with AquaCrop-OSPy **3.0.9** and Gymnasium **0.29**.
+This repository provides the implementation of **AquaCropGymnasium**, a reinforcement learning (RL) environment designed for optimizing irrigation strategies by integrating [AquaCrop-OSPy](https://aquacropos.github.io/aquacrop/) with the [Gymnasium](https://gymnasium.farama.org/) framework. It builds upon the [AquaCrop-Gym](https://github.com/aquacropos/aquacrop-gym) repository and is updated for compatibility with AquaCrop-OSPy **3.0.9** and Gymnasium **0.29**.
 
-[AquaCrop](https://www.fao.org/aquacrop/en/) is a crop growth model developed by the FAO's Land and Water Division. It balances accuracy, robustness, and simplicity, making it well-suited for simulating the yield response of herbaceous crops to varying water availability, especially under water-limited conditions.
+[AquaCrop](https://www.fao.org/aquacrop/en/) is a crop growth model developed by the FAO's Land and Water Division to simulate the yield response of herbaceous crops under varying water availability. [AquaCrop-OSPy](https://aquacropos.github.io/aquacrop/) provides a Python-based interface for AquaCrop, facilitating research in crop-water management and irrigation scheduling.
 
-[AquaCrop-OSPy](https://aquacropos.github.io/aquacrop/) provides a Python-based interface to AquaCrop, enabling advanced research in crop-water management. It empowers users to design and test irrigation strategies with minimal programming complexity.
-
-By integrating AquaCrop-OSPy into a comprehensive RL environment, AquaCropGymnasium facilitates the development and evaluation of intelligent irrigation policies. This approach contributes to sustainable agriculture by leveraging RL to optimize water use while maintaining crop productivity and profitability.
+AquaCropGymnasium integrates AquaCrop-OSPy with a reinforcement learning framework, allowing the development and evaluation of RL-based irrigation policies. This environment supports RL algorithms such as Proximal Policy Optimization (PPO) and enables systematic comparisons between RL-based and traditional irrigation strategies.
 
 ## Features
 
-- **Updated Compatibility:** Works with AquaCrop-OSPy **3.0.9** and Gymnasium **0.29**.
-- **Reinforcement Learning Integration:** Easily train and evaluate RL algorithms (e.g., PPO) using Stable-Baselines3.
-- **Streamlined Setup:** Manages dependencies and installation via Poetry for a simpler setup process.
+- **Updated Compatibility:** Supports AquaCrop-OSPy **3.0.9** and Gymnasium **0.29**.
+- **Reinforcement Learning Integration:** Provides an RL training environment compatible with Stable-Baselines3.
+- **Streamlined Setup:** Uses Poetry for dependency management and installation.
 
 ## Installation
 
@@ -67,3 +63,12 @@ os.environ['DEVELOPMENT'] = 'DEVELOPMENT'
 ```
 
 For further guidance, please visit the [AquaCrop-OSPy GitHub repository](https://github.com/aquacropos/aquacrop?tab=readme-ov-file#installation-troubleshooting).
+
+## Citing AquaCropGymnasium
+
+If you use **AquaCropGymnasium** in your research, please cite our paper:
+
+**Muhammad Alkaff, Abdullah Basuhail, Yuslena Sari**  
+*"Optimizing Water Use in Maize Irrigation with Reinforcement Learning"*  
+**Mathematics**, Volume 13, Issue 4, Article 595, 2025  
+[DOI: 10.3390/math13040595](https://www.mdpi.com/2227-7390/13/4/595)
